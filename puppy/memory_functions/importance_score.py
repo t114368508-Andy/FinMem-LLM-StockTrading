@@ -21,13 +21,14 @@ def get_importance_score_initialization_func(
                 case "long":
                     return I_SampleInitialization_Long()
                 case "reflection":
-                    return I_SampleInitialization_Long()
+                    return I_SampleInitialization_Long()  # 反思層直接沿用深層那張機率表
                 case _:
                     raise ValueError("Invalid memory layer type")
         case _:
             raise ValueError("Invalid importance score initialization type")
 
 
+# 淺層(新聞):純機率抽籤,不看內容,骰子灌鉛在低分那邊——50% 只給 50 分,只有 5% 機率給 90 分
 class I_SampleInitialization_Short(ImportanceScoreInitialization):
     def __call__(self) -> float:
         probabilities = [0.5, 0.45, 0.05]
@@ -35,6 +36,7 @@ class I_SampleInitialization_Short(ImportanceScoreInitialization):
         return np.random.choice(scores, p=probabilities)
 
 
+# 中層(10-Q):骰子灌鉛在中間分數,80% 機率給 60 分
 class I_SampleInitialization_Mid(ImportanceScoreInitialization):
     def __call__(self) -> float:
         probabilities = [0.05, 0.8, 0.15]
@@ -42,6 +44,7 @@ class I_SampleInitialization_Mid(ImportanceScoreInitialization):
         return np.random.choice(scores, p=probabilities)
 
 
+# 深層(10-K,反思層也共用這張表):骰子灌鉛在高分那邊,80% 機率直接給 80 分
 class I_SampleInitialization_Long(ImportanceScoreInitialization):
     def __call__(self) -> float:
         probabilities = [0.05, 0.15, 0.8]

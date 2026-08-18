@@ -33,6 +33,7 @@ class Portfolio:
             self.market_price_series, new_market_price_info
         )
 
+    # 純粹在記憶體裡加減一個數字,沒有連接任何真實券商或交易所,是內部模擬持倉,不是真的下單
     def record_action(self, action: Dict[str, int]) -> None:
         self.holding_shares += action["direction"]
         self.action_series[self.cur_date] = action["direction"]
@@ -50,6 +51,7 @@ class Portfolio:
             self.portfolio_share_series, self.holding_shares
         )
 
+    # Investment decisions③ 用的回饋值:算最近 lookback_window_size 天「股價漲跌×實際持股」的實際損益,不是單純股價方向;天數不夠就回傳 None
     def get_feedback_response(self) -> Union[Dict[str, Union[int, date]], None]:
         if self.day_count <= self.lookback_window_size:
             return None
@@ -71,20 +73,21 @@ class Portfolio:
 
         if temp > 0:
             return {
-                "feedback": 1,
-                "date": self.date_series[-self.lookback_window_size],
+                "feedback": 1,  # 這段期間實際賺錢 → 對應記憶加分
+                "date": self.date_series[-self.lookback_window_size],  # 回頭記到回顧視窗「起點」那一天的引用,不是今天
             }
         elif temp < 0:
             return {
-                "feedback": -1,
+                "feedback": -1,  # 這段期間實際賠錢 → 對應記憶扣分
                 "date": self.date_series[-self.lookback_window_size],
             }
         else:
             return {
-                "feedback": 0,
+                "feedback": 0,  # 打平,agent.py 那邊看到 0 會直接跳過,不更新任何分數
                 "date": self.date_series[-self.lookback_window_size],
             }
 
+    # Observe:近 moment_window 天的收盤價逐日相減後加總,判斷漲/跌/持平,跟上面的回饋機制是兩套獨立邏輯
     def get_moment(self, moment_window: int = 3) -> Union[Dict[str, int], None]:
         if self.day_count <= moment_window:
             return None

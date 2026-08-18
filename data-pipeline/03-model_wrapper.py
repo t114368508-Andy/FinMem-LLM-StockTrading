@@ -21,6 +21,7 @@ class Chatgpt(Model_Wrapper):
         openai.api_key = self.__key
         self.model_name = model_name
     
+    # 實際組出摘要提示詞、呼叫 LLM API 的地方,約 200 tokens 是預設的摘要長度上限
     def _summarize(self, text, summary_token_size):
         prompt = f"Summarize the following news within {summary_token_size} tokens:\n{text}\nSummary:"
         response = openai.ChatCompletion.create(

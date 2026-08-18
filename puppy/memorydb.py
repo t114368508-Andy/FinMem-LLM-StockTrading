@@ -29,6 +29,7 @@ class id_generator_func:
         return self.current_id - 1
 
 
+# Layered Long-term Memory:單一層(淺/中/深/反思其中一層)的資料存取與分數管理,BrainDB 會把 4 個這種物件包在一起
 class MemoryDB:  # can possibly take multiple symbols
     def __init__(
         self,
@@ -81,6 +82,7 @@ class MemoryDB:  # can possibly take multiple symbols
         }
         self.universe[symbol] = temp_record
 
+    # 每筆新記憶都各自獨立處理:各自轉向量、各自抽籤決定重要性分數、各自從新近度滿分開始
     def add_memory(self, symbol: str, date: date, text: Union[List[str], str]) -> None:
         # add new symbol if not exist
         if symbol not in self.universe:
@@ -92,11 +94,11 @@ class MemoryDB:  # can possibly take multiple symbols
         emb = self.emb_func(text)
         faiss.normalize_L2(emb)
         ids = [self.id_generator() for _ in range(len(text))]
-        # initialize importance score
+        # initialize importance score  ← 機率抽籤決定,不是看內容判斷;抽哪張機率表由這層是淺/中/深/反思決定
         importance_scores = [
             self.importance_score_initialization_func() for _ in range(len(text))
         ]
-        # recency
+        # recency                      ← 固定給滿分 1.0
         recency_scores = [
             self.recency_score_initialization_func() for _ in range(len(text))
         ]
@@ -135,6 +137,7 @@ class MemoryDB:  # can possibly take multiple symbols
                 }
             )
 
+    # Retrieve 本體:part1 找最相似的候選、part2 找綜合分數最高的候選,兩批合併後依「相似度+綜合分數」重新排名取 Top-K
     def query(
         self, query_text: str, top_k: int, symbol: str
     ) -> Tuple[List[str], List[int]]:
@@ -153,7 +156,7 @@ class MemoryDB:  # can possibly take multiple symbols
         temp_score = []
         temp_date_list = []
         temp_ids = []
-        # top 5 similar query: part 1 search
+        # part 1:先找「跟查詢最相似」的一批候選
         p1_dists, p1_ids = cur_index.search(emb, top_k)
         p1_dists, p1_ids = p1_dists[0].tolist(), p1_ids[0].tolist()
         for cur_sim, cur_id in zip(p1_dists, p1_ids):
@@ -173,7 +176,7 @@ class MemoryDB:  # can possibly take multiple symbols
                     cur_sim, cur_record["important_score_recency_compound_score"]  # type: ignore
                 )
             )
-        # top 5 partial compound score: part 2 search
+        # part 2:再找「本身綜合分數最高」的一批候選(不管跟查詢像不像)
         p2_ids = [self.universe[symbol]["score_memory"][i]["id"] for i in range(top_k)]
         temp_arrays = [cur_index.reconstruct(i) for i in p2_ids]
         p2_emb = np.vstack(temp_arrays)
@@ -199,9 +202,9 @@ class MemoryDB:  # can possibly take multiple symbols
                     cur_sim, cur_record["important_score_recency_compound_score"]  # type: ignore
                 )
             )
-        # rank sort
+        # 兩批候選合併,依「相似度+綜合分數」(merge_score)排序,取分數最高的 top_k
         score_rank = np.argsort(temp_score)[::-1][:top_k]
-        # filter unique list
+        # filter unique list  ← 同一筆若兩批都選到,這裡去重複
         temp_ret_text_list = [temp_text_list[i] for i in score_rank]
         temp_ret_date_list = [temp_date_list[i] for i in score_rank]
         temp_ret_ids = [temp_ids[i] for i in score_rank]
@@ -246,8 +249,8 @@ class MemoryDB:  # can possibly take multiple symbols
         return success_ids
 
     def _decay(self) -> None:
-        # 1. decay importance score
-        # 2. decay recency score
+        # 1. decay importance score  ← 只會往下掉,乘上一個小於 1 的衰退係數
+        # 2. decay recency score     ← exp(-經過天數/衰退係數),淺層掉最快、深層跟反思層掉最慢
         for cur_symbol in self.universe:
             cur_score_memory = self.universe[cur_symbol]["score_memory"]
             for i in range(len(cur_score_memory)):
@@ -267,6 +270,7 @@ class MemoryDB:  # can possibly take multiple symbols
                 )
             self.universe[cur_symbol]["score_memory"] = cur_score_memory
 
+    # 清倉:新近度、重要性兩個分數「任一」過低就整筆刪除,不用兩個都低;每層各自獨立檢查,不用先掉到淺層才能被刪
     def _clean_up(self) -> List[int]:
         ret_removed_ids = []
         for cur_symbol in self.universe:
@@ -298,6 +302,7 @@ class MemoryDB:  # can possibly take multiple symbols
         self._decay()
         return self._clean_up()
 
+    # 升降層只看重要性分數一個(不看新近度、不看綜合分數);淺層沒有下限、深層沒有上限
     def prepare_jump(
         self,
     ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]], List[int]]:
@@ -313,7 +318,7 @@ class MemoryDB:  # can possibly take multiple symbols
             temp_emb_list_down = []
             cur_score_memory = self.universe[cur_symbol]["score_memory"]
             for i in range(len(cur_score_memory)):
-                if cur_score_memory[i]["important_score"] >= self.jump_threshold_upper:
+                if cur_score_memory[i]["important_score"] >= self.jump_threshold_upper:  # 夠格升層
                     temp_delete_ids_up.append(cur_score_memory[i]["id"])
                     temp_jump_object_list_up.append(cur_score_memory[i])
                     temp_emb_list_up.append(
@@ -321,7 +326,7 @@ class MemoryDB:  # can possibly take multiple symbols
                             cur_score_memory[i]["id"]
                         )
                     )
-                if cur_score_memory[i]["important_score"] < self.jump_threshold_lower:
+                if cur_score_memory[i]["important_score"] < self.jump_threshold_lower:  # 該降層
                     temp_delete_ids_down.append(cur_score_memory[i]["id"])
                     temp_jump_object_list_down.append(cur_score_memory[i])
                     temp_emb_list_down.append(
@@ -353,6 +358,7 @@ class MemoryDB:  # can possibly take multiple symbols
                 }
         return jump_dict_up, jump_dict_down, id_to_remove
 
+    # 把記憶接進這一層:升層(up)才會重置新近度分數跟計時器,降層(down)不會,是帶著舊分數直接搬過來的
     def accept_jump(self, jump_dict: Dict[str, Dict[str, Any]], direction: str) -> None:
         if direction not in ["up", "down"]:
             raise ValueError("direction must be either [up] or [down]")
@@ -365,7 +371,7 @@ class MemoryDB:  # can possibly take multiple symbols
             for cur_object in jump_dict[cur_symbol]["jump_object_list"]:
                 new_ids.append(cur_object["id"])
                 # cur_object["id"] = new_ids[-1]
-                if direction == "up":
+                if direction == "up":  # 升層才重置,像重新開始一樣
                     cur_object["recency_score"] = (
                         self.recency_score_initialization_func()
                     )
@@ -458,6 +464,7 @@ class MemoryDB:  # can possibly take multiple symbols
         return obj
 
 
+# 把淺/中/深/反思 4 個 MemoryDB 包成一個整體,對外提供統一的新增與查詢介面,就是「Layered Long-term Memory」整個模組
 class BrainDB:
     def __init__(
         self,
@@ -678,6 +685,7 @@ class BrainDB:
             )
         )
 
+    # Investment decisions④ 實際觸發的地方:四層各自 decay+clean_up,接著跑升降層;反思層完全不參與升降層迴圈
     def step(self) -> None:
         # first decay then clean up
         self.removed_ids.extend(self.short_term_memory.step())
@@ -705,9 +713,9 @@ class BrainDB:
             for i in range(len(cur_memory)):
                 self.logger.info(f"memory: {cur_memory[i]}")
 
-        # then jump
+        # then jump  ← 注意:只處理 short/mid/long 三層,reflection_memory 沒有出現在這段升降層邏輯裡
         self.logger.info("Memory jump starts...")
-        for _ in range(2):
+        for _ in range(2):  # 跑兩輪,讓分數夠高的記憶有機會一次連升兩層
             # short
             self.logger.info("Short term memory starts...")
             (

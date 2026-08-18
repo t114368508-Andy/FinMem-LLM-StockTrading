@@ -5,11 +5,11 @@ system_message = "You are a helpful assistant."
 
 
 [general]
-top_k = 3
+top_k = 3  # Retrieve 每層各自取前幾筆
 agent_name = "agent_1"
-look_back_window_size = 7
+look_back_window_size = 7  # Investment decisions③ 用的回顧視窗天數,也是 Observe 動能(固定3天)以外的另一個獨立視窗
 trading_symbol = "TSLA"
-character_string = '''
+character_string = '''  # Profiling:人設文字,建立 Agent 時讀入一次,之後只給 Retrieve 當查詢字串用
 You accumuate a lot of informaion of the following sectors so you are especially good at trading them:
 (1)Electric Vehicles (Automotive Sector).
 (2) Energy Generation and Storage.
@@ -29,25 +29,29 @@ chunk_size=5000
 verbose=false
 
 
+# 淺層:忘得最快(recency_factor=3天),升層門檻 60 分,沒有下限(已經是最淺,無法再降層)
 [short]
 importance_score_initialization = "sample"
 decay_params = {recency_factor=3.0, importance_factor=0.92}
 clean_up_threshold_dict = {recency_threshold=0.05, importance_threshold=5}
 jump_threshold_upper = 60
 
+# 中層:忘得中等(90天),60分以下降回淺層、80分以上升深層
 [mid]
 jump_threshold_lower = 60
-jump_threshold_upper = 80 
+jump_threshold_upper = 80
 importance_score_initialization = "sample"
 decay_params = {recency_factor=90.0, importance_factor=0.967}
 clean_up_threshold_dict = {recency_threshold=0.05, importance_threshold=5}
 
+# 深層:忘得最慢(365天≈1093天才會低於清倉門檻),80分以下降回中層,沒有上限(已經是最深)
 [long]
 jump_threshold_lower = 80
 importance_score_initialization = "sample"
 decay_params = {recency_factor=365.0, importance_factor=0.988}
 clean_up_threshold_dict = {recency_threshold=0.05, importance_threshold=5}
 
+# 反思層:衰減速度跟深層一樣慢,但完全沒有 jump_threshold,因為它從不參與升降層(memorydb.py 的 BrainDB.step 沒把它排進迴圈)
 [reflection]
 importance_score_initialization = "sample"
 decay_params = {recency_factor=365.0, importance_factor=0.988}

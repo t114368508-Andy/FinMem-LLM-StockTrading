@@ -22,7 +22,7 @@ test_news = r"""
 print(model.summarize(test_news))
 exit()
 '''
-summary = model.summarize
+summary = model.summarize  # Summarize 主體:離線腳本,在整個模擬開始前就先跑完,不屬於每日流程
 def process_row(row, lock, df, df_name):
     # Perform summary on the 'body' column for news and 'content' column for 10k10q
     result = summary(row['body'])

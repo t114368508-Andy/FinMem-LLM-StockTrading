@@ -351,6 +351,7 @@ def _test_response_model_invest_info(
     return response_model, investment_info
 
 
+# Reflect 主函式:組提示詞(記憶內容+動能敘述)、呼叫 LLM、驗證回傳格式;整個每日流程裡唯一會呼叫 LLM 的地方
 def trading_reflection(
     cur_date: date,
     endpoint_func: Callable[[str], str],
@@ -390,6 +391,7 @@ def trading_reflection(
     )
 
     if run_mode == RunMode.Train:
+        # Train:把 future_record(隔日實際漲跌,答案)一起放進提示詞,叫 LLM 解釋「為什麼會這樣走」
         response_model, investment_info = _train_response_model_invest_info(
             cur_date=cur_date,
             symbol=symbol,
@@ -405,6 +407,7 @@ def trading_reflection(
         )
         cur_prompt = train_prompt
     else:
+        # Test:看不到答案,response_model 這裡才會多一個 investment_decision(買/賣/持有)欄位
         response_model, investment_info = _test_response_model_invest_info(
             cur_date=cur_date,
             symbol=symbol,
@@ -421,6 +424,7 @@ def trading_reflection(
         cur_prompt = test_prompt
 
     # prompt + validated output
+    # 用 pydantic 結構規定回答格式;num_reasks=1 代表格式不對或編號不在候選清單裡,會請 LLM 重答一次
     guard = gd.Guard.from_pydantic(
         output_class=response_model, prompt=cur_prompt, num_reasks=1
     )
@@ -428,7 +432,7 @@ def trading_reflection(
     try:
         # , validated_output
         validated_outcomes = guard(
-            endpoint_func,
+            endpoint_func,  # 真正發送請求給 LLM 的函式,定義在 chat.py
             prompt_params={"investment_info": investment_info},
         )
         logger.info("Guardrails Raw LLM Outputs")

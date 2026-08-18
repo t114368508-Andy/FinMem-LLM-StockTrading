@@ -89,7 +89,7 @@ class LLMAgent(Agent):
         self,
         agent_name: str,
         trading_symbol: str,
-        character_string: str,
+        character_string: str,  # Profiling:人設文字,建立 Agent 當下讀入,之後全程不變
         brain_db: BrainDB,
         chat_config: Dict[str, Any],
         top_k: int = 1,
@@ -100,7 +100,7 @@ class LLMAgent(Agent):
         self.top_k = top_k
         self.agent_name = agent_name
         self.trading_symbol = trading_symbol
-        self.character_string = character_string
+        self.character_string = character_string  # 存成固定屬性;只會被 Retrieve 當查詢字串使用,不會出現在 Reflect 的提示詞裡
         self.look_back_window_size = look_back_window_size
         # logger
         self.logger = logging.getLogger(__name__)
@@ -164,28 +164,31 @@ class LLMAgent(Agent):
             look_back_window_size=config["general"]["look_back_window_size"],
         )
 
+    # Sorting(財報這一半):10-Q 存中層、10-K 存深層,兩種文件共用這一個函式
     def _handling_filings(self, cur_date: date, filing_q: str, filing_k: str) -> None:
         if filing_q:
-            self.brain.add_memory_mid(
+            self.brain.add_memory_mid(  # 10-Q → 中層
                 symbol=self.trading_symbol, date=cur_date, text=filing_q
             )
         if filing_k:
-            self.brain.add_memory_long(
+            self.brain.add_memory_long(  # 10-K → 深層
                 symbol=self.trading_symbol,
                 date=cur_date,
                 text=filing_k,
             )
 
+    # Sorting(新聞這一半):新聞固定存進淺層
     def _handling_news(self, cur_date: date, news: List[str]) -> None:
         if news != {}:
             self.brain.add_memory_short(
                 symbol=self.trading_symbol, date=cur_date, text=news
             )
     
+    # Retrieve:四層各自獨立查詢,人設字串是這裡唯一被用到的地方
     def __query_info_for_reflection(self, run_mode: RunMode):
         # sourcery skip: low-code-quality
         self.logger.info(f"Symbol: {self.trading_symbol}\n")
-        cur_short_queried, cur_short_memory_id = self.brain.query_short(
+        cur_short_queried, cur_short_memory_id = self.brain.query_short(  # 淺層 Top-K
             query_text=self.character_string,
             top_k=self.top_k,
             symbol=self.trading_symbol,
@@ -208,7 +211,7 @@ class LLMAgent(Agent):
             for cur_id, cur_memory in zip(cur_short_memory_id, cur_short_queried):
                 self.logger.info(f"Top-k Short: {cur_id}: {cur_memory}\n")
 
-        cur_mid_queried, cur_mid_memory_id = self.brain.query_mid(
+        cur_mid_queried, cur_mid_memory_id = self.brain.query_mid(  # 中層 Top-K
             query_text=self.character_string,
             top_k=self.top_k,
             symbol=self.trading_symbol,
@@ -229,7 +232,7 @@ class LLMAgent(Agent):
             for cur_id, cur_memory in zip(cur_mid_memory_id, cur_mid_queried):
                 self.logger.info(f"Top-k Mid: {cur_id}: {cur_memory}\n")
 
-        cur_long_queried, cur_long_memory_id = self.brain.query_long(
+        cur_long_queried, cur_long_memory_id = self.brain.query_long(  # 深層 Top-K
             query_text=self.character_string,
             top_k=self.top_k,
             symbol=self.trading_symbol,
@@ -255,7 +258,7 @@ class LLMAgent(Agent):
         (
             cur_reflection_queried,
             cur_reflection_memory_id,
-        ) = self.brain.query_reflection(
+        ) = self.brain.query_reflection(  # 反思層 Top-K(這層不參與升降層,但一樣會被查詢)
             query_text=self.character_string,
             top_k=self.top_k,
             symbol=self.trading_symbol,
@@ -457,10 +460,12 @@ class LLMAgent(Agent):
             else:
                 self.logger.info("no decision")
 
+    # Investment decisions①(Train):完全不看 LLM,直接用隔日實際漲跌決定買賣方向
     def _construct_train_actions(self, cur_record: float) -> Dict[str, int]:
         cur_direction = 1 if cur_record > 0 else -1
         return {"direction": cur_direction, "quantity": 1}
 
+    # Investment decisions②:把方向寫進持倉紀錄,純內部模擬,沒有連接真實券商下單
     def _portfolio_step(self, cur_action: Dict[str, int]) -> None:
         self.portfolio.record_action(action=cur_action)  # type: ignore
         self.portfolio.update_portfolio_series()
@@ -513,6 +518,7 @@ class LLMAgent(Agent):
                 feedback=feedback,
             )
 
+    # 把「這次引用了哪些記憶編號」跟「回饋值(可能是負的)」送進 access_counter += feedback
     def __update_access_counter_sub(self, cur_memory, layer_index_name, feedback):
         if cur_memory[layer_index_name] is not None:
             cur_ids = []
@@ -526,6 +532,7 @@ class LLMAgent(Agent):
                 feedback=feedback["feedback"],
             )
 
+    # Investment decisions①(Test):讀取 LLM 的投資決策,轉成買/賣/持有的方向數字
     @staticmethod
     def __process_test_action(test_reflection_result: Dict[str, Any]) -> Dict[str, int]:
         if (
@@ -542,6 +549,7 @@ class LLMAgent(Agent):
         else:
             return {"direction": -1}
 
+    # Investment decisions③:回顧視窗天數不夠時 get_feedback_response 回傳 None,直接跳過,不做任何加減分
     def _update_access_counter(self):
         if not (feedback := self.portfolio.get_feedback_response()):
             return
@@ -576,24 +584,25 @@ class LLMAgent(Agent):
         cur_filing_k = market_info[2]
         cur_filing_q = market_info[3]
         cur_news = market_info[4]
-        cur_record = market_info[5] if run_mode == RunMode.Train else None
-        # 1. handling filings
+        cur_record = market_info[5] if run_mode == RunMode.Train else None  # 隔日實際漲跌;Test 模式在這裡被擋掉,直接設 None,不能偷看未來
+        # 1. handling filings         → Sorting(財報)
         self._handling_filings(
             cur_date=cur_date, filing_q=cur_filing_q, filing_k=cur_filing_k  # type: ignore
         )
-        # 2. handling news
+        # 2. handling news            → Sorting(新聞)
         self._handling_news(cur_date=cur_date, news=cur_news)
-        # 3. update the price to portfolio
+        # 3. update the price to portfolio → Observe 用的股價來源
         self.portfolio.update_market_info(
             new_market_price_info=cur_price,
             cur_date=cur_date,
         )
+        # 4. Retrieve + Reflect(內部呼叫 __query_info_for_reflection 跟 LLM)
         self._reflect(
             cur_date=cur_date,
             run_mode=run_mode,
             cur_record=cur_record,
         )
-        # 5. construct actions
+        # 5. construct actions        → Investment decisions①,依模式決定買賣方向
         if run_mode == RunMode.Train:
             cur_action = self._construct_train_actions(
                 cur_record=cur_record  # type: ignore
@@ -602,11 +611,11 @@ class LLMAgent(Agent):
             cur_action = self.__process_test_action(
                 test_reflection_result=self.reflection_result_series_dict[cur_date]
             )
-        # 6. portfolio step
+        # 6. portfolio step           → Investment decisions②,寫進持倉
         self._portfolio_step(cur_action=cur_action)  # type: ignore
-        # 7. update the access counter if need to
+        # 7. update the access counter if need to → Investment decisions③,依實際損益回饋記憶
         self._update_access_counter()
-        # 8. brain step
+        # 8. brain step               → Investment decisions④,整個記憶庫完成當天的衰退/清倉/升降層
         self.brain.step()
 
     def save_checkpoint(self, path: str, force: bool = False) -> None:

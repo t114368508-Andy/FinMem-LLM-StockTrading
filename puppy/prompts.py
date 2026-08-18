@@ -28,6 +28,7 @@ test_momentum_explanation = """The information below provides a summary of stock
         """
 
 # prompts
+# Train 模式的提示詞:重點是「解釋為什麼」,不要求輸出買/賣/持有的決策欄位
 train_prompt = """Given the following information, can you explain to me why the financial market fluctuation from current day to the next day behaves like this? Just summarize the reason of the decision。
     Your should provide a summary information and the id of the information to support your summary.
 
@@ -38,6 +39,7 @@ train_prompt = """Given the following information, can you explain to me why the
 """
 # When cumulative return is positive or zero, you are a risk-seeking investor, positive information have a greater influence on your investment decisions, while negative information have a lesser impact.
 # But when cumulative return is negative, you are a risk-averse investor, negative information have a greater influence on your investment decisions, while positive information have a lesser impact.
+# Test 模式的提示詞:要求真的做出買/賣/持有的決策,看不到未來股價
 test_prompt = """ Given the information, can you make an investment decision? Just summarize the reason of the decision.
     please consider only the available short-term information, the mid-term information, the long-term information, the reflection-term information.
     please consider the momentum of the historical stock price.

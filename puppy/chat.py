@@ -70,6 +70,7 @@ class ChatOpenAICompatible(ABC):
         else:
             raise NotImplementedError(f"Model {self.model} not implemented")
 
+    # 真正打 HTTP 請求給 LLM API 的地方,依 self.model 開頭字串分流成 GPT / Gemini / TGI 三種不同的請求格式
     def guardrail_endpoint(self) -> Callable:
         def end_point(input: str, **kwargs) -> str:
             input_str = [

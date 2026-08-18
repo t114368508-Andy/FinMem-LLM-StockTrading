@@ -57,6 +57,7 @@ def subset_symbol_dict(input_dir, cur_symbol):
     return new_dict, ticker_dict_byDate
 
 #### finBERT
+# 這是專門用金融文本微調過的 BERT 神經網路模型,不是 LLM;跟 Summarize 用的摘要 LLM 是完全不同的技術
 # Load the tokenizer and model
 tokenizer = BertTokenizer.from_pretrained('yiyanghkust/finbert-tone')
 model = BertForSequenceClassification.from_pretrained('yiyanghkust/finbert-tone')
@@ -96,6 +97,7 @@ def assign_finBERT_scores(new_dict, cur_symbol):
 
 
 ### vader
+# 規則式詞典比對工具,不是神經網路;速度快、不吃資源,但沒有 FinBERT 那麼懂上下文
 analyzer = SentimentIntensityAnalyzer()
 
 def assign_vader_scores(new_dict, cur_symbol):
