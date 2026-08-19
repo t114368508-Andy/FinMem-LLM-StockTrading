@@ -7,6 +7,7 @@ MAX_ATTEMPTS = 5
 WAIT_TIME = 10
 
 class Model_Wrapper(ABC):
+    # Summarize 對外統一入口,帶重試機制;實際怎麼摘要由下面各家模型子類別的 _summarize() 決定
     @retry(stop=stop_after_attempt(MAX_ATTEMPTS), wait=wait_fixed(WAIT_TIME))
     def summarize(self, text, summary_token_size = 200):
         return self._summarize(text, summary_token_size)

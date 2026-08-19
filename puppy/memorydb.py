@@ -248,6 +248,7 @@ class MemoryDB:  # can possibly take multiple symbols
         self.universe[symbol]["score_memory"] = cur_score_memory
         return success_ids
 
+    # 這一層裡每一筆記憶,當天各自的新近度、重要性分數重新計算一次(BrainDB.step() 每天呼叫)
     def _decay(self) -> None:
         # 1. decay importance score  ← 只會往下掉,乘上一個小於 1 的衰退係數
         # 2. decay recency score     ← exp(-經過天數/衰退係數),淺層掉最快、深層跟反思層掉最慢
@@ -270,7 +271,7 @@ class MemoryDB:  # can possibly take multiple symbols
                 )
             self.universe[cur_symbol]["score_memory"] = cur_score_memory
 
-    # 清倉:新近度、重要性兩個分數「任一」過低就整筆刪除,不用兩個都低;每層各自獨立檢查,不用先掉到淺層才能被刪
+    # 清除:新近度、重要性兩個分數「任一」過低就整筆刪除,不用兩個都低;每層各自獨立檢查,不用先掉到淺層才能被刪
     def _clean_up(self) -> List[int]:
         ret_removed_ids = []
         for cur_symbol in self.universe:

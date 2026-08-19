@@ -1,3 +1,4 @@
+# 兩個用途:①把新近度+重要性合成「綜合分數」,決定排隊順序 ②Retrieve 查詢時再把相似度加進來,決定 Top-K
 class LinearCompoundScore:
     # 綜合分數 = 新近度 + min(重要性,100)/100;min() 是為了不讓重要性(可能超過 100)蓋過新近度(固定 0~1),兩者才公平相加
     def recency_and_importance_score(

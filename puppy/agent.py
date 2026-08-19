@@ -570,6 +570,7 @@ class LLMAgent(Agent):
                 feedback=feedback, cur_memory=cur_memory
             )
 
+    # 每天執行的主函式,依序跑完 Sorting → Observe/存記憶 → Retrieve+Reflect → Investment decisions①~④,完整一天的流程
     def step(
         self,
         market_info: market_info_type,
