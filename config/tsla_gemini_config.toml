@@ -1,6 +1,6 @@
 [chat]
-model="gemini-pro"
-end_point = "https://us-central1-aiplatform.googleapis.com/v1/projects/elite-destiny-371016/locations/us-central1/publishers/google/models/gemini-pro:generateContent"
+model="gemini-3.5-flash-lite"
+end_point = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent"
 system_message = "You are a helpful assistant."
 
 
@@ -24,9 +24,11 @@ From year 2021 to 2022 September, Tesla's continued growth and solid financial p
 
 
 [agent.agent_1.embedding.detail]
-embedding_model = "text-embedding-ada-002"
-chunk_size=5000
-verbose=false
+provider = "gemini"
+embedding_model = "gemini-embedding-001"
+output_dimensionality = 768
+chunk_char_size = 6000
+verbose = false
 
 
 [short]

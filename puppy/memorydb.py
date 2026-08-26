@@ -8,7 +8,7 @@ import numpy as np
 from datetime import date
 from itertools import repeat
 from sortedcontainers import SortedList
-from .embedding import OpenAILongerThanContextEmb
+from .embedding import OpenAILongerThanContextEmb, GeminiLongerThanContextEmb
 from typing import List, Union, Dict, Any, Tuple, Callable
 from .memory_functions import (
     ImportanceScoreInitialization,
@@ -18,6 +18,15 @@ from .memory_functions import (
     ExponentialDecay,
     LinearImportanceScoreChange,
 )
+
+
+# which embedding backend to build depends on the `provider` key in the
+# config's [agent.agent_1.embedding.detail] table; the rest of that table is
+# passed straight through as kwargs to the chosen class's constructor
+_EMBEDDING_BACKENDS = {
+    "openai": OpenAILongerThanContextEmb,
+    "gemini": GeminiLongerThanContextEmb,
+}
 
 
 class id_generator_func:
@@ -53,8 +62,9 @@ class MemoryDB:  # can possibly take multiple symbols
         self.jump_threshold_upper = jump_threshold_upper
         self.jump_threshold_lower = jump_threshold_lower
         self.emb_config = emb_config
-        self.emb_func = OpenAILongerThanContextEmb(**self.emb_config)
-        # self.emb_func = OpenAILongerThanContextEmb(**self.config["agent"]["agent_1"]["embedding"]["detail"])
+        backend_kwargs = dict(self.emb_config)
+        backend_name = backend_kwargs.pop("provider", "openai")
+        self.emb_func = _EMBEDDING_BACKENDS[backend_name](**backend_kwargs)
         self.emb_dim = self.emb_func.get_embedding_dimension()
         self.importance_score_initialization_func = importance_score_initialization
         self.recency_score_initialization_func = recency_score_initialization
@@ -382,7 +392,7 @@ class MemoryDB:  # can possibly take multiple symbols
             if not force:
                 raise FileExistsError(f"Memory db {name} already exists")
             shutil.rmtree(os.path.join(path, name))
-        os.mkdir(os.path.join(path, name))
+        os.makedirs(os.path.join(path, name), exist_ok=True)
         # save config dict
         state_dict = {
             "db_name": self.db_name,
@@ -773,7 +783,7 @@ class BrainDB:
             if not force:
                 raise FileExistsError(f"Brain db {path} already exists")
             shutil.rmtree(path)
-        os.mkdir(path)
+        os.makedirs(path, exist_ok=True)
         # save state dict
         state_dict = {
             "agent_name": self.agent_name,

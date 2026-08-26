@@ -82,7 +82,7 @@ class MarketEnvironment:
         if self.env_data[self.cur_date]["news"] != {}:
             cur_news = self.env_data[self.cur_date]["news"]
         else:
-            cur_news = {self.symbol: ''}
+            cur_news = {self.symbol: []}
             
         cur_record = {
             symbol: future_price[symbol] - cur_price[symbol]  # type: ignore
@@ -116,7 +116,7 @@ class MarketEnvironment:
                 shutil.rmtree(path)
             else:
                 raise FileExistsError(f"Path {path} already exists")
-        os.mkdir(path)
+        os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, "env.pkl"), "wb") as f:
             pickle.dump(self, f)
 

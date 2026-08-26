@@ -96,6 +96,21 @@ OPENAI_API_KEY = "<Your OpenAI Key>"
 # HF_TOKEN = ""
 ```
 
+To run the free-tier Gemini setup (`config/tsla_gemini_config.toml`), `OPENAI_API_KEY` is not
+used at all — `puppy/chat.py` and `puppy/embedding.py` instead read `GEMINI_API_KEY` directly, and
+`fetch_filing_sec.py` / `fetch_news_tavily.py` / `fetch_news_finnhub.py` need their own keys too:
+
+```bash
+GEMINI_API_KEY = "<Your Gemini API Key from Google AI Studio>"
+SEC_KEY = "<Your sec-api.io key>"
+TAVILY_API_KEY = "<Your Tavily key>"
+FINNHUB_API_KEY = "<Your Finnhub key>"
+```
+
+If `GEMINI_API_KEY` is left unset, requests silently authenticate with an invalid placeholder
+value and fail with an opaque error instead of a clear "missing key" message — set it before
+running `run.py sim` with this config.
+
 ### Build Docker Image & Run the Container
 
 The dockerfile is based on Python 3.10 at
